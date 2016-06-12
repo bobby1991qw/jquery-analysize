@@ -114,7 +114,7 @@ jq.fn.init的详情：
 	} // end jq.fn.init
 
 
-jq.duildFragment分析
+jq.buildFragment分析
 	jq.buildFragment = function(args, nodes ,scripts) {
 		// args存储待转换的代码片段
 		// nodes存储上下文
