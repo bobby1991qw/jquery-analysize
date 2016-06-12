@@ -1,0 +1,252 @@
+jq的结构:
+	$(function(window,undefined){
+
+	    var jquery=(function(){
+			var jquery=function(selector,context){
+				return new jquery.fn.init(); //实际上的构造函数
+			},
+
+			jquery.fn=jquery.prototype={
+				constructor:jquery, //因为用对象字面量覆盖了prototype，constructor被指向object，此处为了修复正确指向
+				init:function(selector,context,rootJquery){
+				     .....
+					 //rootJquery=jquery(document) 定义顶级上下文，在缺失上下文时使用
+				}
+				.....
+			}
+
+			jquery.fn.init.prototype=jquery.prototype;//$('xxxx')创建的是前者的实例，用后者覆盖前者，使挂在后者prototype上的方法能被前者的实例调用
+
+			return jquery;
+		})();
+
+		window.jquery=window.$=jquery; //将jquery挂到window上
+	})(window); //匿名自执行函数，为了不污染全局变量
+
+
+
+jq.fn.init的详情：
+	jQuery.fn.init = function:(selector, context, rootJquery) {
+		// rootJquery在其他部分被赋值为jQuery(document)
+		//
+
+		if(!selector) {
+		  // 处理selector能转换为false的情况
+		  return this;  // 直接jQuery
+		}
+
+		if(selector.nodeType){
+		  // 处理selector是dom节点的情况
+		  this.context = this[0] = selector;
+		  this.length = 1;
+		  return this;
+		}
+
+		if(typeof selector === 'string') {
+			// 处理selector是字符串的情况
+
+			// quickExpr = /^(?:[^#<]*(<[\w\W]+>)[^>]*$|#([\w\-]*)$)/  匹配[aaa]<bbb>[ccc]或者#ddd的情况
+			// aaa和ccc是可选的，其中aaa不能是#或者<,ccc不能是>,
+			// 得到的结果match = [\1, \2, \3]
+			// \1是匹配的全部， \2是可能的html片段，即<xxxx>， \3是id选择器，即#xxx
+
+
+
+			if( selector.charAt(0) === '<' && selector.charAt(selector.length - 1 ) === '>' && selector.length >=3 ) {
+				// selector是<xxx>的形式，跳过正则处理，直接设置match
+				match = [undefined, selector, undefined];
+			} else {
+				match = quickExpr.exec(selector);
+			}
+
+			if(match && (match[1] || !context)) {
+				// 当match匹配成功时的结果可能是 [\1, \2, undefined] 或者 [\1, undefined, \2]
+
+				if(match[1]) {
+					// 修正context是dom元素
+					this.context = context instanceOf jQuery ? context[0] : context;
+					// 当context是json对象时，this.doc并不是document元素
+					this.doc = context ? context.parentNode || context : document;
+
+					// rsingleTag = /^<(\w+)\s*\/?>(?:<\/\1>)?$/ 匹配<p></p>,<img />,<img /></img>的情况，
+					// 即匹配一个简单的标签
+					// 当ret有值时 [\1, \2]，\2为标签名
+					ret = rsingleTag.exec( selector );
+
+					if(ret) {
+						if(jQuery.isPlainObject(context)){
+							// 当context是json时，创建标签并设置相应的属性
+							selector = [ document.createElement(ret[1]) ];
+							jQuery.fn.attr.call(selector, context, true);
+						} else {
+							selector = [ context.creactElement(ret[1]) ]；
+						}
+
+					} else {
+						// 当selector不是简单标签时，使用buildFragment创建标签
+						ret = jQuery.buildFragment([ret[1]], [doc]);
+						// 判断是否使用缓存
+						selector = ( ret.cacheable ? jQuery.clone(ret.fragment) : ret.fragment ).childNodes;
+					}
+				}
+
+			} else if(!context || context.jQuery) {
+				// 当context为false或者context是jq对象时进入
+				return $(context || rootJquery).find(selector);
+			} else {
+				// 相当于$(context).find(selector)
+				return this.constructor(context).find(selector)
+			}
+
+		} else if(jQuery.isFunction(selector)) {
+			// 处理selector是function的情况
+			return rootJquery.ready(selector);
+		}
+
+		// 处理$($(selector))的情况
+		if(selector.selector !== undefined) {
+			this.selector = selector.selector;
+			this.context = selector.context;
+		}
+
+		return jQuery.makeArray(selector, this);
+
+	} // end jq.fn.init
+
+
+jq.duildFragment分析
+	jq.buildFragment = function(args, nodes ,scripts) {
+		// args存储待转换的代码片段
+		// nodes存储上下文
+		// scripts存储代码片段里的script
+
+		first = args[0]
+
+		// 修正上下文doc
+		if(nodes && nodes[0]) {
+			doc = nodes[0].ownerDocument || nodes[0]
+		}
+
+		if(!doc.createDocumentFragment) {
+			doc = document
+		}
+
+		// 判断是否符合缓存条件
+		if(
+			args.length === 1 && typeof first === 'string' &&
+			first.length < 512 &&doc === document &&
+			first.charAt(0) === '<' && !rnocache.test(first) &&
+			(jquery.support.checkClone || !rchecked.test(first)) &&
+			(jquery.support.html5Clone || !rnoshimcache.test(first))
+		) {
+			// 缓存条件：
+			// args只有一个string类型的片段，大小不超过512（1/2KB）
+			// doc为当前文档对象，不缓存iframe的片段
+			// 只缓存标签<xxx>的形式，不缓存普通文本
+			// 不缓存script，object，embed，option，style标签：rnocache = /<(?:script|object|embed|option|style)/i,
+			// 能够正确克隆checked状态或者不存在checked状态：/checked\s*(?:[^=]|=\s*.checked.)/i 匹配 'checked ','checked = '
+			// 能够正确克隆H5元素，或者不包含H5元素： rnoshimcache = new RegExp("<(?:" + nodeNames + ")", "i"),
+			// nodeNames = "abbr|article|aside|audio|canvas|datalist|details|figcaption|figure|footer|header|hgroup|mark|meter|nav|output|progress|section|summary|time|video"
+
+			cacheable = true;
+			cacharesults = jquery.fragments[first];
+			if(cacharesults && cacharesults !== 1) {
+				fragment = cacharesults;
+			}
+		}
+
+		// 创建html片段
+		if(!fragment) {
+			fragment = doc.createDocumentFragment();
+			jquery.clean(args, doct, fragment, scripts);
+		}
+
+		// 设置缓存
+		if(cacheable) {
+			jquery.fragments[first] = cacharesults ? fragment : 1;
+		}
+
+		return { fragment: fragment, cacheable: cacheable };
+
+	}// end jquery.buildFragment
+
+
+jquery.clean分析
+	// 创建一个安全的html文档片段
+
+	// nodeNames = "abbr|article|aside|audio|canvas|datalist|details|figcaption|figure|footer|header|hgroup|mark|meter|nav|output|progress|section|summary|time|video",
+	function createSafeFragment( document ) {
+		var list = nodeNames.split( "|" ),
+		safeFrag = document.createDocumentFragment();
+
+		if ( safeFrag.createElement ) {
+			while ( list.length ) {
+				safeFrag.createElement(
+					list.pop()
+				);
+			}
+		}
+		return safeFrag;
+	}
+
+	jquery.clean = function(elems, context, fragment, scripts) {
+		// 修正上下文
+		context = context || document
+
+		if(typeof context.createElement === 'undefined') {
+			context = context.ownerDocument || context[0] && context[0].ownerDocument || document;
+		}
+
+		var ret =[],j;
+
+		// 遍历待转换的html片段
+		for(var i=0,ele;(ele = elems[i])!= null; i++) {
+			if(typeof ele === 'number') {
+				ele += '';
+			}
+
+			if(!ele) {
+				continue;
+			}
+
+			if(typeof ele === 'string') {
+				if(!rhtml.text(ele)) {
+					// rhtml = /<|&#?\w+;/ 匹配标签的开头<或者 &#?quot;的形式,即特殊符号的转义形式
+					ele = context.createTextNode(ele)
+				} else {
+					// rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/ig,
+					// rxhtml匹配所有非单标签，  这句将<div xxxx />转换成<div xxxx><>/div的形式
+					ele = ele.replace(rxhtmlTag, '<$1></$2>');
+
+					// rtagName = /<([\w:]+)/匹配一个标签的名称
+
+					// wrapMap = {
+					// 				option: [ 1, "<select multiple='multiple'>", "</select>" ],
+					// 				legend: [ 1, "<fieldset>", "</fieldset>" ],
+					//				thead: [ 1, "<table>", "</table>" ],
+					// 				tr: [ 2, "<table><tbody>", "</tbody></table>" ],
+					// 				td: [ 3, "<table><tbody><tr>", "</tr></tbody></table>" ],
+					// 				col: [ 2, "<table><tbody></tbody><colgroup>", "</colgroup></table>" ],
+					// 				area: [ 1, "<map>", "</map>" ],
+					// 				_default: [ 0, "", "" ]
+					// },
+
+					var tag = (rtagName.exec(ele) || ["",""])[1].toLowerCase(),
+						wrap = wrapMap[tag] || wrap._default,
+						dept = wrap[0],
+						div = context.creactElement('div');
+
+
+					if(context === document) {
+						safeFragment.appendChild( div );
+					} else {
+						createSafeFragment( context ).appendChild( div );
+					}
+
+				}
+
+			}
+		}
+
+
+	} // end jquery.clean

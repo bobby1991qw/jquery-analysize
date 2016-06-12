@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>jq源码分析</title>
+	</head>
+	<body>
+		<div id="qw">qw</div>
+		<script src="jquery.js" ></script>
+		<script>
+			(function(window,undefined){
+				var myjq=(function(){
+					var myjq=function(selector){
+						return new myjq.prototype.init(selector);
+					};
+
+					myjq.prototype={
+						// constructor:myjq,
+						init:function(selector){
+							if( selector instanceof Array ){
+								var count=selector.length;
+								this.constructor.prototype.length=count;
+								for(var i=0;i<count;i++){
+									this.constructor.prototype[i]=selector[i];
+								}
+							}
+							return this;
+						},
+						show:function(){
+							console.log(1);
+						}
+					};
+
+					myjq.prototype.init.prototype=myjq.prototype;
+
+					return myjq;
+				})();
+				window.myjq=myjq;
+			})(window);
+		</script>
+	</body>
+</html>
